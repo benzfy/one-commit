@@ -167,7 +167,9 @@ DESCRIPTION RULES:
 - No capital letter after colon
 - No period at the end
 - 50 characters or less
+- BE SPECIFIC: Include module/file/function names from the actual code changes
 - Describe WHAT and WHY, not HOW
+- Avoid vague terms like "optimize", "improve", "refactor" without specific context
 
 EXAMPLE FORMATS:
 
@@ -182,9 +184,20 @@ ${shouldUseDetailedFormat ?
 - Optimize rendering performance for large file lists`
 :
 `Concise format (<100 lines changed):
-✅ fix(api): resolve null pointer in user service
-✅ feat(cli): add file selection shortcuts
-✅ docs(readme): update installation instructions`}`;
+✅ fix(auth): resolve null pointer in UserService.validate()
+✅ feat(converter): add HemaConverter.parseData() method
+✅ refactor(utils): extract formatDate() to DateUtils class`}
+
+SPECIFICITY EXAMPLES:
+Good (specific):
+✅ "feat(auth): add TokenExpiry enum and validation logic"
+✅ "fix(converter): handle null values in HemaConverter.parse()"
+✅ "refactor(data): extract SupTree.build() concurrency logic"
+
+Bad (vague):
+❌ "feat: optimize enum type definitions and conversion logic"
+❌ "fix: improve data processing error handling mechanism"
+❌ "refactor: restructure data processing workflow"`;
 
   // Add Chinese-specific requirements if language is Chinese
   if (language === 'zh') {
@@ -194,15 +207,21 @@ IMPORTANT FOR CHINESE OUTPUT:
 - Keep the type and scope in English (e.g., "feat", "fix", "api", "ui")
 - Write the description in Chinese using imperative form
 - CRITICAL: Keep all code-related names in their original form (function names, variable names, file names, class names, enum values, etc.)
+- BE SPECIFIC: Include exact module/file/function names from code changes
 - Only translate the ACTION and PURPOSE, not the technical terms
+- Avoid vague terms without specific context (避免模糊术语)
 - Use Chinese bullet points (- ) for detailed explanations
-- Good examples: 
-  ✅ "feat(api): 添加 getUserProfile 函数"
-  ✅ "fix(auth): 修复 TokenExpiry 枚举类型错误"
-  ✅ "refactor(utils): 重构 formatDate 工具函数"
-- Bad examples:
-  ❌ "feat(格式): 添加学习阶段、学科和状态枚举定义" (translated enum names)
-  ❌ "fix(认证): 修复令牌过期枚举类型错误" (translated technical terms)`;
+
+SPECIFICITY EXAMPLES (具体性示例):
+Good (具体的):
+✅ "feat(auth): 添加 TokenExpiry 枚举和验证逻辑"
+✅ "fix(converter): 修复 HemaConverter.parse() 空值处理"
+✅ "refactor(data): 重构 SupTree.build() 并发逻辑"
+
+Bad (模糊的):
+❌ "feat: 优化枚举类型定义和转换逻辑" (no specific names)
+❌ "fix: 改进数据处理的错误处理机制" (too vague)
+❌ "refactor: 重构数据处理流程" (no context)`;
   }
   
   return basePrompt;
@@ -394,7 +413,11 @@ ${processed.content}
 - 对用户或系统有什么影响？`}
 
 ## 生成要求
-请基于以上分析生成一个简洁但准确的commit消息，描述变更的核心目的和价值。`;
+请基于以上分析生成一个简洁但准确的commit消息，要求：
+- 包含具体的函数/类/模块名称（来自实际代码变更）
+- 避免使用模糊术语如"优化"、"改进"、"重构"等（除非有具体上下文）
+- 清楚描述变更的核心目的和价值
+- 让人一眼就能看出改了什么`;
   } else {
     prompt = `Please analyze the following code changes in detail, understand the purpose and impact of the changes, then generate an accurate Conventional Commits message.
 
@@ -434,7 +457,11 @@ Based on the diff content, analyze:
 - What impact do they have on users or the system?`}
 
 ## Generation Requirements
-Based on the above analysis, generate a concise but accurate commit message that describes the core purpose and value of the changes.`;
+Based on the above analysis, generate a concise but accurate commit message that:
+- Includes SPECIFIC function/class/module names from the actual code changes
+- Avoids vague terms like "optimize", "improve", "refactor" without context
+- Clearly describes the core purpose and value of the changes
+- Makes it obvious what was changed just by reading the message`;
   }
 
   if (processed.wasTruncated) {
@@ -445,8 +472,8 @@ Based on the above analysis, generate a concise but accurate commit message that
   }
 
   const finalInstructionText = language === 'zh' ?
-    '\n\n生成一个准确反映这些变更主要目的的 Conventional Commits 提交消息。' :
-    '\n\nGenerate a Conventional Commits message that accurately reflects the primary purpose of these changes.';
+    '\n\n生成一个准确反映这些变更主要目的的 Conventional Commits 提交消息，必须包含具体的代码名称。' :
+    '\n\nGenerate a Conventional Commits message that accurately reflects the primary purpose of these changes with specific code names.';
   prompt += finalInstructionText;
 
   return { prompt, warnings: processed.warnings };
