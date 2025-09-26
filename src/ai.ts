@@ -98,7 +98,9 @@ function createSystemPrompt(language: 'en' | 'zh', diff: GitDiff): string {
   if (language === 'zh') {
     return `你是一个专业的开发者，能够按照 Conventional Commits 规范编写精确的提交消息。
 
-必须格式：<type>[可选scope]: <description>
+必须格式：<type>[可选scope]: <中文描述>
+
+重要：type和scope保持英文，但description必须使用中文！
 
 类型（选择最合适的）：
 - feat: 新功能
@@ -119,6 +121,7 @@ function createSystemPrompt(language: 'en' | 'zh', diff: GitDiff): string {
 - 如果变更影响多个模块则省略
 
 描述规则：
+- 必须使用中文
 - 使用动宾形式："增加"而非"增加了"或"增加中"
 - 冒号后不要大写
 - 结尾不加句号
@@ -135,8 +138,9 @@ ${isLargeChange ? '由于这是一个较大的变更，请写一个概括性的�
 ✅ style: 使用prettier格式化代码
 ✅ test(auth): 添加登录流程单元测试
 ✅ chore(deps): 更新react到v18.2.0
+✅ feat(cli): 增加提交后统计信息显示
 
-只回复符合上述格式的提交消息。`;
+只回复符合上述格式的提交消息，描述部分必须是中文。`;
   }
   
   // English system prompt

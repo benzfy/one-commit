@@ -14,6 +14,7 @@ export function getConfig(): Config {
     apiKey: config.get('apiKey') || process.env.OPENAI_API_KEY,
     baseUrl: config.get('baseUrl') || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
     model: config.get('model') || 'gpt-4o-mini',
+    language: config.get('language') || 'en',
   };
 }
 
@@ -26,6 +27,9 @@ export function setConfig(updates: Partial<Config>): void {
   }
   if (updates.model) {
     config.set('model', updates.model);
+  }
+  if (updates.language) {
+    config.set('language', updates.language);
   }
 }
 

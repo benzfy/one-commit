@@ -159,25 +159,45 @@ const ConfigSetup: React.FC<ConfigSetupProps> = ({ onComplete }) => {
   const handleApiKeySubmit = (value: string) => {
     setApiKey(value);
     if (hasExistingConfig) {
-      saveConfigAndFinish();
+      setConfig({
+        apiKey: value,
+        baseUrl,
+        model,
+        language,
+      });
+      onComplete();
     } else {
       setStep('base-url');
     }
   };
 
   const handleBaseUrlSubmit = (value: string) => {
-    setBaseUrl(value || 'https://api.openai.com/v1');
+    const newBaseUrl = value || 'https://api.openai.com/v1';
+    setBaseUrl(newBaseUrl);
     if (hasExistingConfig) {
-      saveConfigAndFinish();
+      setConfig({
+        apiKey,
+        baseUrl: newBaseUrl,
+        model,
+        language,
+      });
+      onComplete();
     } else {
       setStep('model');
     }
   };
 
   const handleModelSubmit = (value: string) => {
-    setModel(value || 'gpt-4o-mini');
+    const newModel = value || 'gpt-4o-mini';
+    setModel(newModel);
     if (hasExistingConfig) {
-      saveConfigAndFinish();
+      setConfig({
+        apiKey,
+        baseUrl,
+        model: newModel,
+        language,
+      });
+      onComplete();
     } else {
       setStep('language');
     }
@@ -185,7 +205,16 @@ const ConfigSetup: React.FC<ConfigSetupProps> = ({ onComplete }) => {
 
   const handleLanguageSelect = (item: { value: 'en' | 'zh' }) => {
     setLanguage(item.value);
-    saveConfigAndFinish();
+    
+    // Save config immediately with the new language value
+    setConfig({
+      apiKey,
+      baseUrl,
+      model,
+      language: item.value, // Use the new value directly
+    });
+    
+    onComplete();
   };
 
   return (
@@ -275,6 +304,27 @@ const ConfigSetup: React.FC<ConfigSetupProps> = ({ onComplete }) => {
   );
 };
 
+// Helper function to generate commit summary
+const generateCommitSummary = (message: string, diff: GitDiff | null): string => {
+  if (!diff) return '';
+  
+  const { files, additions, deletions } = diff;
+  const filesChanged = files.length;
+  
+  let summary = `[${message}]\n`;
+  summary += ` ${filesChanged} file${filesChanged !== 1 ? 's' : ''} changed`;
+  
+  if (additions > 0) {
+    summary += `, ${additions} insertion${additions !== 1 ? 's' : ''}(+)`;
+  }
+  
+  if (deletions > 0) {
+    summary += `, ${deletions > 0 && additions > 0 ? '' : ' '}${deletions} deletion${deletions !== 1 ? 's' : ''}(-)`;
+  }
+  
+  return summary;
+};
+
 const CommitFlow: React.FC<CommitFlowProps> = ({ onExit }) => {
   const [stage, setStage] = useState<'checking' | 'no-changes' | 'file-select' | 'stage-prompt' | 'generating' | 'review' | 'committing' | 'done' | 'error' | 'staged-reset'>('checking');
   const [error, setError] = useState<string>('');
@@ -284,6 +334,7 @@ const CommitFlow: React.FC<CommitFlowProps> = ({ onExit }) => {
   const [availableFiles, setAvailableFiles] = useState<{ modified: string[]; untracked: string[]; }>({ modified: [], untracked: [] });
   const [selectedFilesList, setSelectedFilesList] = useState<string[]>([]);
   const [aiWarnings, setAiWarnings] = useState<string[]>([]);
+  const [commitSummary, setCommitSummary] = useState<string>('');
 
   useEffect(() => {
     checkRepository();
@@ -422,8 +473,13 @@ const CommitFlow: React.FC<CommitFlowProps> = ({ onExit }) => {
           await git.stageFiles(selectedFilesList);
         }
         await git.commit(commitMessage);
+        
+        // Generate commit summary
+        const summary = generateCommitSummary(commitMessage, diff);
+        setCommitSummary(summary);
+        
         setStage('done');
-        setTimeout(onExit, 2000);
+        setTimeout(onExit, 3000);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to commit');
         setStage('error');
@@ -451,8 +507,13 @@ const CommitFlow: React.FC<CommitFlowProps> = ({ onExit }) => {
         await git.stageFiles(selectedFilesList);
       }
       await git.commit(message);
+      
+      // Generate commit summary
+      const summary = generateCommitSummary(message, diff);
+      setCommitSummary(summary);
+      
       setStage('done');
-      setTimeout(onExit, 2000);
+      setTimeout(onExit, 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to commit');
       setStage('error');
@@ -592,7 +653,15 @@ const CommitFlow: React.FC<CommitFlowProps> = ({ onExit }) => {
       )}
 
       {stage === 'done' && (
-        <Text color="green">✅ Successfully committed!</Text>
+        <>
+          <Text color="green">✅ Successfully committed!</Text>
+          {commitSummary && (
+            <>
+              <Text></Text>
+              <Text color="gray">{commitSummary}</Text>
+            </>
+          )}
+        </>
       )}
 
       {stage === 'error' && (
