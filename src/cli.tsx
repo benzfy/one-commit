@@ -30,11 +30,13 @@ interface FileSelectProps {
 }
 
 const FileSelector: React.FC<FileSelectProps> = ({ files, onSubmit, onCancel }) => {
-  const allFiles = [...files.modified, ...files.untracked];
+  const [showAllNewFiles, setShowAllNewFiles] = useState(false);
+  const visibleNewFiles = showAllNewFiles ? files.untracked : files.untracked.slice(0, 10);
+  const allFiles = [...files.modified, ...visibleNewFiles];
   
   const [selectedIndex, setSelectedIndex] = useState(0);
-  // Default to all files selected
-  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set(allFiles));
+  // Default to only modified files selected (exclude new files)
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set(files.modified));
 
   useInput((input, key) => {
     if (key.upArrow && selectedIndex > 0) {
@@ -52,11 +54,17 @@ const FileSelector: React.FC<FileSelectProps> = ({ files, onSubmit, onCancel }) 
       }
       setSelectedFiles(newSelected);
     } else if (input === 'a' || input === 'A') {
-      // Select All hotkey
-      setSelectedFiles(new Set(allFiles));
+      // Select All hotkey (including all untracked files)
+      const allAvailableFiles = [...files.modified, ...files.untracked];
+      setSelectedFiles(new Set(allAvailableFiles));
     } else if (input === 'd' || input === 'D') {
       // Deselect All hotkey
       setSelectedFiles(new Set());
+    } else if (input === 'm' || input === 'M') {
+      // Toggle show more new files
+      if (files.untracked.length > 10) {
+        setShowAllNewFiles(!showAllNewFiles);
+      }
     } else if (key.return) {
       if (selectedFiles.size > 0) {
         onSubmit(Array.from(selectedFiles));
@@ -70,7 +78,7 @@ const FileSelector: React.FC<FileSelectProps> = ({ files, onSubmit, onCancel }) 
     <Box flexDirection="column">
       <Text color="cyan" bold>Select files to stage:</Text>
       <Text color="gray">Use ↑/↓ to navigate, space to select/deselect, enter to confirm</Text>
-      <Text color="gray">Press 'a' to select all, 'd' to deselect all</Text>
+      <Text color="gray">Press 'a' to select all, 'd' to deselect all{files.untracked.length > 10 ? ", 'm' to show more new files" : ""}</Text>
       <Text></Text>
       
       {files.modified.length > 0 && (
@@ -94,7 +102,7 @@ const FileSelector: React.FC<FileSelectProps> = ({ files, onSubmit, onCancel }) 
       {files.untracked.length > 0 && (
         <>
           <Text color="green" bold>New files:</Text>
-          {files.untracked.map((file, index) => {
+          {visibleNewFiles.map((file, index) => {
             const globalIndex = files.modified.length + index;
             const isSelected = selectedIndex === globalIndex;
             const isChecked = selectedFiles.has(file);
@@ -106,12 +114,22 @@ const FileSelector: React.FC<FileSelectProps> = ({ files, onSubmit, onCancel }) 
               </Text>
             );
           })}
+          {files.untracked.length > 10 && !showAllNewFiles && (
+            <Text color="gray">
+              ... and {files.untracked.length - 10} more new files (press 'm' to show all)
+            </Text>
+          )}
+          {files.untracked.length > 10 && showAllNewFiles && (
+            <Text color="gray">
+              Press 'm' to show less
+            </Text>
+          )}
         </>
       )}
       
       <Text></Text>
       <Text color="gray">
-        Selected: {selectedFiles.size}/{allFiles.length} file{selectedFiles.size !== 1 ? 's' : ''}
+        Selected: {selectedFiles.size}/{files.modified.length + files.untracked.length} file{selectedFiles.size !== 1 ? 's' : ''}
       </Text>
       <Text color="gray">Press ESC or Ctrl+C to cancel</Text>
     </Box>

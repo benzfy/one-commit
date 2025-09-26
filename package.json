@@ -1,5 +1,5 @@
 {
-  "name": "one-commit",
+  "name": "@beiyuz/one-commit",
   "version": "1.0.0",
   "description": "AI-powered automatic commit message generator",
   "main": "dist/cli.js",
@@ -28,16 +28,16 @@
     "commit-message",
     "npx"
   ],
-  "author": "zhoufangyuan",
+  "author": "beiyuz",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/zhoufangyuan/one-commit.git"
+    "url": "https://github.com/benzfy/one-commit.git"
   },
   "bugs": {
-    "url": "https://github.com/zhoufangyuan/one-commit/issues"
+    "url": "https://github.com/benzfy/one-commit/issues"
   },
-  "homepage": "https://github.com/zhoufangyuan/one-commit#readme",
+  "homepage": "https://github.com/benzfy/one-commit#readme",
   "dependencies": {
     "chalk": "^5.3.0",
     "commander": "^11.1.0",
