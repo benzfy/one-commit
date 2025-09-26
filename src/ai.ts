@@ -193,8 +193,16 @@ ${shouldUseDetailedFormat ?
 IMPORTANT FOR CHINESE OUTPUT:
 - Keep the type and scope in English (e.g., "feat", "fix", "api", "ui")
 - Write the description in Chinese using imperative form
+- CRITICAL: Keep all code-related names in their original form (function names, variable names, file names, class names, enum values, etc.)
+- Only translate the ACTION and PURPOSE, not the technical terms
 - Use Chinese bullet points (- ) for detailed explanations
-- Chinese examples: "fix(api): 修复用户服务空指针异常", "feat(cli): 增加文件选择快捷键"`;
+- Good examples: 
+  ✅ "feat(api): 添加 getUserProfile 函数"
+  ✅ "fix(auth): 修复 TokenExpiry 枚举类型错误"
+  ✅ "refactor(utils): 重构 formatDate 工具函数"
+- Bad examples:
+  ❌ "feat(格式): 添加学习阶段、学科和状态枚举定义" (translated enum names)
+  ❌ "fix(认证): 修复令牌过期枚举类型错误" (translated technical terms)`;
   }
   
   return basePrompt;
