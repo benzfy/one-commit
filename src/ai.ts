@@ -3,6 +3,7 @@ import { getConfig } from './config.js';
 import { GitDiff, Config } from './types.js';
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
+import { getRecentCommits } from './git.js';
 
 // Simple token estimation (roughly 4 characters per token for English text)
 function estimateTokens(text: string): number {
@@ -211,7 +212,7 @@ export async function generateCommitMessage(diff: GitDiff): Promise<{ message: s
     baseURL: config.baseUrl,
   });
 
-  const { prompt, warnings } = createCommitPrompt(diff, config);
+  const { prompt, warnings } = await createCommitPrompt(diff, config);
 
   try {
     const completion = await openai.chat.completions.create({
@@ -332,11 +333,12 @@ function analyzeChangedFiles(files: string[]): FileAnalysis {
   };
 }
 
-function createCommitPrompt(diff: GitDiff, config: Config): { prompt: string; warnings: string[] } {
+async function createCommitPrompt(diff: GitDiff, config: Config): Promise<{ prompt: string; warnings: string[] }> {
   const { files, additions, deletions, content } = diff;
 
   const processed = processDiffContent(content);
   const projectContext = getProjectContext();
+  const recentCommits = await getRecentCommits(10);
 
   // Analyze file changes to suggest scope and type
   const fileAnalysis = analyzeChangedFiles(files);
@@ -350,6 +352,9 @@ function createCommitPrompt(diff: GitDiff, config: Config): { prompt: string; wa
 
 ${projectContext ? `## 项目背景信息
 ${projectContext}
+
+` : ''}${recentCommits.length > 0 ? `## 近期提交记录
+${recentCommits.map((commit, i) => `${i + 1}. ${commit}`).join('\n')}
 
 ` : ''}## 项目上下文分析
 变更规模：${files.length}个文件，+${additions}行/-${deletions}行
@@ -387,6 +392,9 @@ ${processed.content}
 
 ${projectContext ? `## Project Background Information
 ${projectContext}
+
+` : ''}${recentCommits.length > 0 ? `## Recent Commit History (for style reference)
+${recentCommits.map((commit, i) => `${i + 1}. ${commit}`).join('\n')}
 
 ` : ''}## Project Context Analysis
 Change scale: ${files.length} files, +${additions}/-${deletions} lines

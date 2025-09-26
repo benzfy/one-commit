@@ -177,3 +177,21 @@ export async function resetStagedFiles(): Promise<void> {
     throw new Error(`Failed to reset staged files: ${error}`);
   }
 }
+
+export async function getRecentCommits(count: number = 10): Promise<string[]> {
+  try {
+    // Check if HEAD exists (i.e., if there's at least one commit)
+    try {
+      await execa('git', ['rev-parse', '--verify', 'HEAD']);
+    } catch {
+      // No commits yet, return empty array
+      return [];
+    }
+    
+    const { stdout } = await execa('git', ['log', `--oneline`, `-${count}`, '--pretty=format:%s']);
+    return stdout.trim().split('\n').filter(Boolean);
+  } catch (error) {
+    // If any error occurs (including no commits), return empty array
+    return [];
+  }
+}
