@@ -29,10 +29,37 @@ interface FileSelectProps {
   onCancel: () => void;
 }
 
+// Helper functions for virtual scrolling
+const getTerminalHeight = (): number => {
+  return process.stdout.rows || 24;
+};
+
+const getVisibleRange = (selectedIndex: number, totalFiles: number, maxVisible: number) => {
+  if (totalFiles <= maxVisible) {
+    return { start: 0, end: totalFiles };
+  }
+  
+  const halfWindow = Math.floor(maxVisible / 2);
+  let start = Math.max(0, selectedIndex - halfWindow);
+  let end = Math.min(totalFiles, start + maxVisible);
+  
+  // Adjust window to utilize full space
+  if (end - start < maxVisible) {
+    start = Math.max(0, end - maxVisible);
+  }
+  
+  return { start, end };
+};
+
 const FileSelector: React.FC<FileSelectProps> = ({ files, onSubmit, onCancel }) => {
   const [showAllNewFiles, setShowAllNewFiles] = useState(false);
   const visibleNewFiles = showAllNewFiles ? files.untracked : files.untracked.slice(0, 10);
   const allFiles = [...files.modified, ...visibleNewFiles];
+  
+  // Calculate display window
+  const terminalHeight = getTerminalHeight();
+  const reservedLines = 12; // Title, help text, stats, spacing, scroll indicator
+  const maxVisibleFiles = Math.max(5, terminalHeight - reservedLines);
   
   const [selectedIndex, setSelectedIndex] = useState(0);
   // Default to only modified files selected (exclude new files)
@@ -43,6 +70,12 @@ const FileSelector: React.FC<FileSelectProps> = ({ files, onSubmit, onCancel }) 
       setSelectedIndex(selectedIndex - 1);
     } else if (key.downArrow && selectedIndex < allFiles.length - 1) {
       setSelectedIndex(selectedIndex + 1);
+    } else if (key.ctrl && input === 'a') {
+      // Ctrl+A: Jump to beginning
+      setSelectedIndex(0);
+    } else if (key.ctrl && input === 'e') {
+      // Ctrl+E: Jump to end
+      setSelectedIndex(allFiles.length - 1);
     } else if (input === ' ') {
       // Toggle individual file
       const file = allFiles[selectedIndex];
@@ -74,57 +107,64 @@ const FileSelector: React.FC<FileSelectProps> = ({ files, onSubmit, onCancel }) 
     }
   });
 
+  // Calculate visible range for virtual scrolling
+  const { start: visibleStart, end: visibleEnd } = getVisibleRange(selectedIndex, allFiles.length, maxVisibleFiles);
+  const visibleFiles = allFiles.slice(visibleStart, visibleEnd);
+  
+  // Helper function to render a single file
+  const renderFile = (file: string, index: number) => {
+    const isSelected = selectedIndex === index;
+    const isChecked = selectedFiles.has(file);
+    const isModified = files.modified.includes(file);
+    
+    return (
+      <Text key={file} color={isSelected ? 'blue' : 'white'}>
+        {isSelected ? '❯ ' : '  '}
+        {isChecked ? '[✓]' : '[ ]'}
+        {isModified ? '📝' : '➕'} {file}
+      </Text>
+    );
+  };
+
   return (
     <Box flexDirection="column">
       <Text color="cyan" bold>Select files to stage:</Text>
       <Text color="gray">Use ↑/↓ to navigate, space to select/deselect, enter to confirm</Text>
-      <Text color="gray">Press 'a' to select all, 'd' to deselect all{files.untracked.length > 10 ? ", 'm' to show more new files" : ""}</Text>
+      <Text color="gray">Press 'a' to select all, 'd' to deselect all, Ctrl+A/E for start/end{files.untracked.length > 10 ? ", 'm' to show more new files" : ""}</Text>
       <Text></Text>
       
-      {files.modified.length > 0 && (
+      {/* Scroll indicator */}
+      {allFiles.length > maxVisibleFiles && (
         <>
-          <Text color="yellow" bold>Modified files:</Text>
-          {files.modified.map((file, index) => {
-            const isSelected = selectedIndex === index;
-            const isChecked = selectedFiles.has(file);
-            return (
-              <Text key={file} color={isSelected ? 'blue' : 'white'}>
-                {isSelected ? '❯ ' : '  '}
-                {isChecked ? '[✓]' : '[ ]'}
-                📝 {file}
-              </Text>
-            );
-          })}
+          <Text color="gray">Showing {visibleStart + 1}-{visibleEnd} of {allFiles.length} files</Text>
           <Text></Text>
         </>
       )}
       
-      {files.untracked.length > 0 && (
+      {/* File sections headers */}
+      {visibleStart < files.modified.length && files.modified.length > 0 && (
+        <Text color="yellow" bold>Modified files:</Text>
+      )}
+      
+      {/* Render visible files */}
+      {visibleFiles.map((file, localIndex) => {
+        const globalIndex = visibleStart + localIndex;
+        return renderFile(file, globalIndex);
+      })}
+      
+      {/* New files section header */}
+      {visibleEnd > files.modified.length && files.untracked.length > 0 && (
         <>
+          {visibleStart <= files.modified.length && <Text></Text>}
           <Text color="green" bold>New files:</Text>
-          {visibleNewFiles.map((file, index) => {
-            const globalIndex = files.modified.length + index;
-            const isSelected = selectedIndex === globalIndex;
-            const isChecked = selectedFiles.has(file);
-            return (
-              <Text key={file} color={isSelected ? 'blue' : 'white'}>
-                {isSelected ? '❯ ' : '  '}
-                {isChecked ? '[✓]' : '[ ]'}
-                ➕ {file}
-              </Text>
-            );
-          })}
-          {files.untracked.length > 10 && !showAllNewFiles && (
-            <Text color="gray">
-              ... and {files.untracked.length - 10} more new files (press 'm' to show all)
-            </Text>
-          )}
-          {files.untracked.length > 10 && showAllNewFiles && (
-            <Text color="gray">
-              Press 'm' to show less
-            </Text>
-          )}
         </>
+      )}
+      
+      {/* Show more new files indicator */}
+      {files.untracked.length > 10 && !showAllNewFiles && visibleEnd >= files.modified.length + 10 && (
+        <Text color="gray">
+          ... and {files.untracked.length - 10} more new files (press 'm' to show all)
+        </Text>
       )}
       
       <Text></Text>
@@ -353,6 +393,7 @@ const CommitFlow: React.FC<CommitFlowProps> = ({ onExit }) => {
   const [selectedFilesList, setSelectedFilesList] = useState<string[]>([]);
   const [aiWarnings, setAiWarnings] = useState<string[]>([]);
   const [commitSummary, setCommitSummary] = useState<string>('');
+  const [stagedFiles, setStagedFiles] = useState<GitDiff | null>(null);
 
   useEffect(() => {
     checkRepository();
@@ -375,6 +416,7 @@ const CommitFlow: React.FC<CommitFlowProps> = ({ onExit }) => {
 
       const staged = await git.getStagedChanges();
       if (staged.files.length > 0) {
+        setStagedFiles(staged);
         // Check if there are also unstaged files - might be accidental staging
         const unstagedFiles = await git.getAllUnstagedFiles();
         if (unstagedFiles.modified.length > 0 || unstagedFiles.untracked.length > 0) {
@@ -581,13 +623,23 @@ const CommitFlow: React.FC<CommitFlowProps> = ({ onExit }) => {
 
       {stage === 'staged-reset' && (
         <>
-          <Text color="yellow">⚠️  Some files are already staged.</Text>
-          <Text>You can continue with staged files or reset and select files manually.</Text>
+          <Text color="yellow">⚠️  Files already staged for commit:</Text>
           <Text></Text>
+          {stagedFiles && (
+            <>
+              <Text color="gray">Staged files ({stagedFiles.files.length}):</Text>
+              {stagedFiles.files.map(file => (
+                <Text key={file} color="green">  ✓ {file}</Text>
+              ))}
+              <Text color="gray">Changes: +{stagedFiles.additions} -{stagedFiles.deletions}</Text>
+              <Text></Text>
+            </>
+          )}
+          <Text>What would you like to do?</Text>
           <SelectInput
             items={[
-              { label: '🔄 Reset staged files and select manually', value: 'reset' },
               { label: '✅ Continue with current staged files', value: 'continue' },
+              { label: '🔄 Reset and select files manually', value: 'reset' },
               { label: '❌ Cancel', value: 'cancel' },
             ]}
             onSelect={handleStagedResetChoice}

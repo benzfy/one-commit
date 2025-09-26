@@ -1,6 +1,8 @@
 import OpenAI from 'openai';
 import { getConfig } from './config.js';
 import { GitDiff, Config } from './types.js';
+import { readFileSync, existsSync } from 'fs';
+import { resolve } from 'path';
 
 // Simple token estimation (roughly 4 characters per token for English text)
 function estimateTokens(text: string): number {
@@ -90,6 +92,30 @@ function processDiffContent(diffContent: string): ProcessedDiff {
 function extractFileName(diffSection: string): string {
   const match = diffSection.match(/^diff --git a\/(.+?) b\/(.+?)$/m);
   return match ? match[2] : 'unknown file';
+}
+
+function getProjectContext(): string | null {
+  const contextFiles = ['claude.md', 'agent.md', 'llm.md'];
+  
+  for (const filename of contextFiles) {
+    const filePath = resolve(process.cwd(), filename);
+    if (existsSync(filePath)) {
+      try {
+        const content = readFileSync(filePath, 'utf-8');
+        // Limit context file size to avoid token overflow
+        const maxChars = 2000; // About 500 tokens
+        if (content.length > maxChars) {
+          return content.slice(0, maxChars) + '\n\n[... content truncated ...]';
+        }
+        return content;
+      } catch (error) {
+        // If file can't be read, continue to next file
+        continue;
+      }
+    }
+  }
+  
+  return null;
 }
 
 function createSystemPrompt(language: 'en' | 'zh', diff: GitDiff): string {
@@ -327,6 +353,7 @@ function createCommitPrompt(diff: GitDiff, config: Config): { prompt: string; wa
   const { files, additions, deletions, content } = diff;
 
   const processed = processDiffContent(content);
+  const projectContext = getProjectContext();
 
   // Analyze file changes to suggest scope and type
   const fileAnalysis = analyzeChangedFiles(files);
@@ -336,51 +363,79 @@ function createCommitPrompt(diff: GitDiff, config: Config): { prompt: string; wa
   let prompt: string;
   
   if (language === 'zh') {
-    prompt = `分析以下代码变更并生成符合 Conventional Commits 规范的提交消息：
+    prompt = `请详细分析以下代码变更，理解变更的目的和影响，然后生成一个准确的 Conventional Commits 提交消息。
 
-变更摘要：
-- 变更文件数：${files.length}
-- 新增行数：+${additions}
-- 删除行数：-${deletions}
+${projectContext ? `## 项目背景信息
+${projectContext}
 
-文件分类：
-${fileAnalysis.categories.map(cat => `- ${cat.name}: ${cat.files.join(', ')}`).join('\n')}
+` : ''}## 项目上下文分析
+变更规模：${files.length}个文件，+${additions}行/-${deletions}行
+变更类型：${fileAnalysis.changePattern}
+推荐commit类型：${fileAnalysis.suggestedType}
+${fileAnalysis.suggestedScope ? `推荐作用域：${fileAnalysis.suggestedScope}` : '作用域：无特定作用域'}
 
-建议上下文：
-- 推荐类型：${fileAnalysis.suggestedType}
-- 推荐作用域：${fileAnalysis.suggestedScope}
-- 变更模式：${fileAnalysis.changePattern}
+## 文件变更分析
+${fileAnalysis.categories.map(cat => `### ${cat.name} (${cat.files.length}个文件)
+${cat.files.map(f => `- ${f}`).join('\n')}`).join('\n\n')}
 
-变更文件：
-${files.map(f => `- ${f}`).join('\n')}
+## 详细变更内容
+${isLargeChange ? 
+  `由于变更较大，请根据文件路径和分类来推断主要变更目的。重点关注：
+- 是否是新功能开发？
+- 是否是bug修复？
+- 是否是重构或优化？
+- 影响的主要模块是什么？` 
+  : 
+  `请仔细分析以下diff内容，理解具体的代码变更：
 
-${isLargeChange ? '' : `GIT DIFF:
 \`\`\`diff
 ${processed.content}
-\`\`\``}`;
+\`\`\`
+
+基于diff内容分析：
+- 具体添加/修改/删除了什么功能？
+- 变更的主要目的是什么？
+- 对用户或系统有什么影响？`}
+
+## 生成要求
+请基于以上分析生成一个简洁但准确的commit消息，描述变更的核心目的和价值。`;
   } else {
-    prompt = `Analyze the following code changes and generate a Conventional Commits message:
+    prompt = `Please analyze the following code changes in detail, understand the purpose and impact of the changes, then generate an accurate Conventional Commits message.
 
-CHANGE SUMMARY:
-- Files changed: ${files.length}
-- Lines added: +${additions}
-- Lines deleted: -${deletions}
+${projectContext ? `## Project Background Information
+${projectContext}
 
-FILES BY CATEGORY:
-${fileAnalysis.categories.map(cat => `- ${cat.name}: ${cat.files.join(', ')}`).join('\n')}
+` : ''}## Project Context Analysis
+Change scale: ${files.length} files, +${additions}/-${deletions} lines
+Change pattern: ${fileAnalysis.changePattern}
+Suggested commit type: ${fileAnalysis.suggestedType}
+${fileAnalysis.suggestedScope ? `Suggested scope: ${fileAnalysis.suggestedScope}` : 'Scope: no specific scope'}
 
-SUGGESTED CONTEXT:
-- Likely type: ${fileAnalysis.suggestedType}
-- Likely scope: ${fileAnalysis.suggestedScope}
-- Change pattern: ${fileAnalysis.changePattern}
+## File Change Analysis
+${fileAnalysis.categories.map(cat => `### ${cat.name} (${cat.files.length} files)
+${cat.files.map(f => `- ${f}`).join('\n')}`).join('\n\n')}
 
-CHANGED FILES:
-${files.map(f => `- ${f}`).join('\n')}
+## Detailed Change Content
+${isLargeChange ? 
+  `Due to the large scale of changes, please infer the main purpose based on file paths and categories. Focus on:
+- Is this new feature development?
+- Is this a bug fix?
+- Is this refactoring or optimization?
+- What are the main modules affected?` 
+  : 
+  `Please carefully analyze the following diff content to understand the specific code changes:
 
-${isLargeChange ? '' : `GIT DIFF:
 \`\`\`diff
 ${processed.content}
-\`\`\``}`;
+\`\`\`
+
+Based on the diff content, analyze:
+- What specific functionality was added/modified/removed?
+- What is the main purpose of these changes?
+- What impact do they have on users or the system?`}
+
+## Generation Requirements
+Based on the above analysis, generate a concise but accurate commit message that describes the core purpose and value of the changes.`;
   }
 
   if (processed.wasTruncated) {
