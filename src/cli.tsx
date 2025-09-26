@@ -141,24 +141,41 @@ const FileSelector: React.FC<FileSelectProps> = ({ files, onSubmit, onCancel }) 
         </>
       )}
       
-      {/* File sections headers */}
-      {visibleStart < files.modified.length && files.modified.length > 0 && (
-        <Text color="yellow" bold>Modified files:</Text>
-      )}
-      
-      {/* Render visible files */}
-      {visibleFiles.map((file, localIndex) => {
-        const globalIndex = visibleStart + localIndex;
-        return renderFile(file, globalIndex);
-      })}
-      
-      {/* New files section header */}
-      {visibleEnd > files.modified.length && files.untracked.length > 0 && (
-        <>
-          {visibleStart <= files.modified.length && <Text></Text>}
-          <Text color="green" bold>New files:</Text>
-        </>
-      )}
+      {/* Render files with proper section headers */}
+      {(() => {
+        const elements: JSX.Element[] = [];
+        let modifiedHeaderShown = false;
+        let newFilesHeaderShown = false;
+        
+        visibleFiles.forEach((file, localIndex) => {
+          const globalIndex = visibleStart + localIndex;
+          const isModified = files.modified.includes(file);
+          
+          // Show "Modified files:" header before first modified file
+          if (isModified && !modifiedHeaderShown && files.modified.length > 0) {
+            elements.push(
+              <Text key="modified-header" color="yellow" bold>Modified files:</Text>
+            );
+            modifiedHeaderShown = true;
+          }
+          
+          // Show "New files:" header before first new file
+          if (!isModified && !newFilesHeaderShown && files.untracked.length > 0) {
+            if (modifiedHeaderShown) {
+              elements.push(<Text key="spacing"></Text>);
+            }
+            elements.push(
+              <Text key="new-files-header" color="green" bold>New files:</Text>
+            );
+            newFilesHeaderShown = true;
+          }
+          
+          // Add the file
+          elements.push(renderFile(file, globalIndex));
+        });
+        
+        return elements;
+      })()}
       
       {/* Show more new files indicator */}
       {files.untracked.length > 10 && !showAllNewFiles && visibleEnd >= files.modified.length + 10 && (
