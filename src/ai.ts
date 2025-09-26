@@ -119,60 +119,29 @@ function getProjectContext(): string | null {
 }
 
 function createSystemPrompt(language: 'en' | 'zh', diff: GitDiff): string {
-  const isLargeChange = diff.files.length > 10 || diff.additions + diff.deletions > 500;
+  const totalChanges = diff.additions + diff.deletions;
+  const shouldUseDetailedFormat = totalChanges >= 100;
   
-  if (language === 'zh') {
-    return `你是一个专业的开发者，能够按照 Conventional Commits 规范编写精确的提交消息。
+  const basePrompt = `You are an expert developer who writes precise Conventional Commits format messages.
 
-必须格式：<type>[可选scope]: <中文描述>
+Please use the following output format:
+<thinking>
+[Analyze the purpose, impact and value of the code changes, think about the most appropriate commit type and scope]
+</thinking>
 
-重要：type和scope保持英文，但description必须使用中文！
-
-类型（选择最合适的）：
-- feat: 新功能
-- fix: 修复错误
-- docs: 文档变更
-- style: 代码格式（不影响代码运行的变动）
-- refactor: 重构（既不新增功能，也不修复错误）
-- test: 增加测试
-- chore: 构建过程或辅助工具的变动
-- perf: 性能优化
-- ci: 持续集成相关
-- build: 构建系统或外部依赖的变动
-- revert: 回滚之前的提交
-
-作用域（可选但推荐）：
-- 使用括号：feat(auth): 或 fix(api):
-- 常用作用域：api, ui, auth, db, config, deps, core, utils
-- 如果变更影响多个模块则省略
-
-描述规则：
-- 必须使用中文
-- 使用动宾形式："增加"而非"增加了"或"增加中"
-- 冒号后不要大写
-- 结尾不加句号
-- 50个字符以内
-- 描述做了什么以及为什么，不是怎么做的
-
-${isLargeChange ? '由于这是一个较大的变更，请写一个概括性的提交消息，突出主要目的。' : ''}
-
-示例：
-✅ feat(auth): 添加JWT令牌验证
-✅ fix(api): 修复用户服务空指针异常
-✅ docs(readme): 更新安装说明
-✅ refactor(utils): 简化日期格式化逻辑
-✅ style: 使用prettier格式化代码
-✅ test(auth): 添加登录流程单元测试
-✅ chore(deps): 更新react到v18.2.0
-✅ feat(cli): 增加提交后统计信息显示
-
-只回复符合上述格式的提交消息，描述部分必须是中文。`;
-  }
-  
-  // English system prompt
-  return `You are an expert developer who writes precise Conventional Commits format messages.
+<result>
+[Only output the final commit message here, format: <type>[optional scope]: <description>]
+</result>
 
 MANDATORY FORMAT: <type>[optional scope]: <description>
+
+${shouldUseDetailedFormat ? 
+`Due to large changes (${totalChanges} lines), add detailed explanation after blank line:
+- Use bullet points (- ) to describe specific changes
+- Each point should explain one concrete improvement or change
+- Highlight impact and value to users or system` 
+: 
+`Due to small changes (${totalChanges} lines), only provide a concise title line.`}
 
 TYPES (choose the most appropriate):
 - feat: new feature for the user
@@ -199,25 +168,35 @@ DESCRIPTION RULES:
 - 50 characters or less
 - Describe WHAT and WHY, not HOW
 
-${isLargeChange ? 'This is a large change - write a high-level commit message that captures the main purpose.' : ''}
+EXAMPLE FORMATS:
 
-EXAMPLES:
-✅ feat(auth): add JWT token validation
+${shouldUseDetailedFormat ? 
+`Detailed format (≥100 lines changed):
+✅ feat(cli): add virtual scrolling for file selection
+
+- Auto-detect terminal height and adapt display window
+- Implement smart scrolling with selected item always visible
+- Add Ctrl+A/E shortcuts for quick navigation to start/end
+- Display scroll indicators showing current range (1-20 of 150)
+- Optimize rendering performance for large file lists`
+:
+`Concise format (<100 lines changed):
 ✅ fix(api): resolve null pointer in user service
-✅ docs(readme): update installation instructions  
-✅ refactor(utils): simplify date formatting logic
-✅ style: format code with prettier
-✅ test(auth): add unit tests for login flow
-✅ chore(deps): update react to v18.2.0
-✅ perf(db): optimize user query performance
-✅ ci: add automated testing pipeline
+✅ feat(cli): add file selection shortcuts
+✅ docs(readme): update installation instructions`}`;
 
-❌ Add new feature (missing type)
-❌ feat: Added new feature (past tense)
-❌ feat: add new feature. (period at end)
-❌ fix: Fix the bug in UserService.java (past tense + filename)
+  // Add Chinese-specific requirements if language is Chinese
+  if (language === 'zh') {
+    return basePrompt + `
 
-Respond with ONLY the commit message in the exact format above.`;
+IMPORTANT FOR CHINESE OUTPUT:
+- Keep the type and scope in English (e.g., "feat", "fix", "api", "ui")
+- Write the description in Chinese using imperative form
+- Use Chinese bullet points (- ) for detailed explanations
+- Chinese examples: "fix(api): 修复用户服务空指针异常", "feat(cli): 增加文件选择快捷键"`;
+  }
+  
+  return basePrompt;
 }
 
 export async function generateCommitMessage(diff: GitDiff): Promise<{ message: string; warnings: string[] }> {
@@ -248,13 +227,17 @@ export async function generateCommitMessage(diff: GitDiff): Promise<{ message: s
         },
       ],
       temperature: 0.3,
-      max_tokens: 100,
+      max_tokens: 8000,
     });
 
-    const message = completion.choices[0]?.message?.content?.trim();
-    if (!message) {
+    const rawMessage = completion.choices[0]?.message?.content?.trim();
+    if (!rawMessage) {
       throw new Error('Failed to generate commit message');
     }
+
+    // Extract content from <result> tags
+    const resultMatch = rawMessage.match(/<result>([\s\S]*?)<\/result>/);
+    const message = resultMatch ? resultMatch[1].trim() : rawMessage;
 
     return { message, warnings };
   } catch (error) {
